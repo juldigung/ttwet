@@ -469,3 +469,14 @@ def test_ccxt_rules_convert_contract_size():
     assert r.step_size == Decimal("0.01") and r.min_qty == Decimal("0.01")
     s = src.spot_rules()
     assert s.step_size == Decimal("0.000001") and s.min_notional == Decimal("5")
+
+
+def test_eur_rate_falls_back_to_other_source_then_manual():
+    cfg = make_config()
+    main = FakeSource(eur=None)
+    other = FakeSource(key="bybit", name="Bybit", eur="1.16")
+    md = MarketData(cfg, sources=[main, other], clock_ms=lambda: main.now_ms)
+    assert md.update().eur_usdt == Decimal("1.16")
+    cfg2 = make_config(allgemein__eur_usdt_kurs_manuell=1.12)
+    md2 = MarketData(cfg2, sources=[FakeSource(eur=None)], clock_ms=lambda: main.now_ms)
+    assert md2.update().eur_usdt == Decimal("1.12")

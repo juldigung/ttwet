@@ -206,6 +206,18 @@ class MarketData:
     def _refresh_eur(self, force: bool = False) -> None:
         if force or self._clock() - self._last_eur > 5 * 60_000:
             rate = self.source.eur_usdt()
+            if rate is None:
+                # andere Quellen fragen (nur dieser eine Kurs, die Marktdaten bleiben bei der aktiven Quelle)
+                for i, other in enumerate(self.sources):
+                    if i == self.active:
+                        continue
+                    try:
+                        rate = other.eur_usdt()
+                    except Exception as exc:  # Ersatzquelle darf den Abruf nicht stören
+                        log.info("EUR/USDT bei %s nicht abrufbar: %s", other.name, exc)
+                        rate = None
+                    if rate is not None:
+                        break
             if rate is None and self.cfg.general.eur_usdt_manual is not None:
                 rate = self.cfg.general.eur_usdt_manual
             if rate is not None:
