@@ -15,7 +15,7 @@ from decimal import Decimal
 
 from bot.config import CostCfg, DeltaNeutralCfg
 from bot.data.models import FundingEvent
-from bot.util import D, HOUR_MS, ZERO
+from bot.util import D, HOUR_MS, ZERO, fmt_pct
 
 
 def cost_fraction(costs: CostCfg) -> Decimal:
@@ -42,6 +42,7 @@ class DnEntryCheck:
     expected_income: Decimal  # Anteil des Positionswerts im Amortisationszeitraum
     required: Decimal  # Kostenanteil × Sicherheitsfaktor
     basis: Decimal | None
+    funding_ok: bool = False  # Funding-Bedingung allein erfüllt?
 
 
 def basis_fraction(spot_price: Decimal, perp_price: Decimal) -> Decimal:
@@ -51,7 +52,8 @@ def basis_fraction(spot_price: Decimal, perp_price: Decimal) -> Decimal:
 
 def entry_check(events: list[FundingEvent], interval_ms: int | None, cfg: DeltaNeutralCfg,
                 costs: CostCfg, spot_price: Decimal, perp_price: Decimal) -> DnEntryCheck:
-    """Prüft, ob die Funding-Erwartung die Kosten im Amortisationszeitraum deckt."""
+    """Prüft, ob die Funding-Erwartung die Kosten im Amortisationszeitraum deckt
+    und ob der Abstand Perp–Spot (Basis) normal ist."""
     required = cost_fraction(costs) * cfg.safety_factor
     basis = basis_fraction(spot_price, perp_price) if spot_price and perp_price else None
     if not interval_ms:
@@ -64,16 +66,17 @@ def entry_check(events: list[FundingEvent], interval_ms: int | None, cfg: DeltaN
     last = recent[-1].rate
     avg = sum((e.rate for e in recent), ZERO) / D(len(recent))
     expected = avg * periods
-    if basis is not None and abs(basis) > cfg.max_basis:
-        return DnEntryCheck(False, "Abstand zwischen Perp- und Spot-Preis (Basis) ist ungewöhnlich groß.",
-                            last, avg, periods, expected, required, basis)
     if last <= 0 or avg <= 0:
         return DnEntryCheck(False, "Die Funding-Rate ist nicht positiv.", last, avg, periods, expected, required, basis)
     if expected < required:
         return DnEntryCheck(False, "Die erwarteten Funding-Einnahmen decken die Kosten nicht rechtzeitig.",
                             last, avg, periods, expected, required, basis)
+    if basis is None or abs(basis) > cfg.max_basis:
+        return DnEntryCheck(False, "Abstand zwischen Perp- und Spot-Preis (Basis) ist ungewöhnlich groß "
+                            f"({fmt_pct(basis or 0, 3)}, erlaubt: höchstens {fmt_pct(cfg.max_basis)}).",
+                            last, avg, periods, expected, required, basis, funding_ok=True)
     return DnEntryCheck(True, "Funding hoch genug, Kosten werden voraussichtlich gedeckt.",
-                        last, avg, periods, expected, required, basis)
+                        last, avg, periods, expected, required, basis, funding_ok=True)
 
 
 def exit_check(events_since_entry: list[FundingEvent], cfg: DeltaNeutralCfg) -> tuple[bool, list[Decimal]]:

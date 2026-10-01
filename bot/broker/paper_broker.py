@@ -323,6 +323,7 @@ class DnPosition:
     funding_count: int = 0
     last_funding_time: int = 0
     adjust_fees: Decimal = ZERO  # Gebühren/Slippage für Absicherungs-Anpassungen
+    adjust_pnl: Decimal = ZERO  # realisiertes Kursergebnis aus Absicherungs-Anpassungen
     explanation: str = ""
     features: dict = field(default_factory=dict)
 
@@ -342,7 +343,7 @@ class DnPosition:
             "margin": str(self.margin), "signal_time": self.signal_time,
             "funding_total": str(self.funding_total), "funding_count": self.funding_count,
             "last_funding_time": self.last_funding_time, "adjust_fees": str(self.adjust_fees),
-            "explanation": self.explanation, "features": self.features,
+            "adjust_pnl": str(self.adjust_pnl), "explanation": self.explanation, "features": self.features,
         }
 
     @classmethod
@@ -353,7 +354,8 @@ class DnPosition:
             margin=D(d["margin"]), signal_time=int(d["signal_time"]),
             funding_total=D(d.get("funding_total", "0")), funding_count=int(d.get("funding_count", 0)),
             last_funding_time=int(d.get("last_funding_time", 0)), adjust_fees=D(d.get("adjust_fees", "0")),
-            explanation=d.get("explanation", ""), features=d.get("features", {}),
+            adjust_pnl=D(d.get("adjust_pnl", "0")), explanation=d.get("explanation", ""),
+            features=d.get("features", {}),
         )
 
 
@@ -421,7 +423,7 @@ def dn_pnl(position: DnPosition, spot_exit: Fill, perp_exit: Fill) -> PnlBreakdo
     spot_pnl = position.qty_spot * (spot_exit.raw_price - position.spot_entry.raw_price)
     perp_pnl = position.qty_perp * (position.perp_entry.raw_price - perp_exit.raw_price)
     return PnlBreakdown(
-        price_pnl=money(spot_pnl + perp_pnl),
+        price_pnl=money(spot_pnl + perp_pnl + position.adjust_pnl),
         slippage=(position.spot_entry.slippage_cost + position.perp_entry.slippage_cost
                   + spot_exit.slippage_cost + perp_exit.slippage_cost),
         fees=position.spot_entry.fee + position.perp_entry.fee + spot_exit.fee + perp_exit.fee + position.adjust_fees,

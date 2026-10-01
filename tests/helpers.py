@@ -76,7 +76,8 @@ class FakeSource:
         closes = closes or wave_closes(1100)
         self.all_candles = candles_from_closes(closes, step=step)
         self.now_ms = now if now is not None else self.all_candles[-1].open_time + step // 2
-        self.funding_rate = D(funding_rate)
+        # funding_rate: fester Wert oder Funktion(zeitpunkt) -> Rate
+        self.funding_rate = funding_rate if callable(funding_rate) else D(funding_rate)
         self.fail = fail
         self.eur = D(eur) if eur else None
         self.calls: list[str] = []
@@ -124,7 +125,10 @@ class FakeSource:
         self._check("premium")
         nxt = (self.now_ms // H8 + 1) * H8
         return PremiumInfo(mark_price=D(self.visible()[-1].close * 1.0002), index_price=None,
-                           current_rate=self.funding_rate, next_funding_time=nxt, time=self.now_ms)
+                           current_rate=self.rate_at(nxt), next_funding_time=nxt, time=self.now_ms)
+
+    def rate_at(self, t):
+        return D(self.funding_rate(t)) if callable(self.funding_rate) else self.funding_rate
 
     def funding_history(self, start=None, end=None, limit=1000):
         self._check("funding")
@@ -132,7 +136,7 @@ class FakeSource:
         events = []
         t = (first // H8 + 1) * H8
         while t <= self.now_ms:
-            events.append(FundingEvent(t, self.funding_rate, None))
+            events.append(FundingEvent(t, self.rate_at(t), None))
             t += H8
         if start is not None:
             events = [e for e in events if e.funding_time >= start]
