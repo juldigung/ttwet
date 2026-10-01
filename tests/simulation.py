@@ -59,6 +59,7 @@ class SimExchange:
             self.rates[t] = D(f"{r:.8f}")
         self.now_ms = T0 + 600 * H4 + 10_000
         self.down = False
+        self.corrupt = False
 
     # -- Zeit/Hilfen ---------------------------------------------------------------
     def _check(self):
@@ -88,6 +89,14 @@ class SimExchange:
 
     def _kl(self, limit, start, end, factor=1.0):
         rows = self.visible()
+        if self.corrupt and rows and self.rng.random() < 0.03:
+            # gelegentlich fehlerhafte Daten: doppelte Kerze oder unplausible Kerze (Hoch < Tief)
+            bad = rows[-2]
+            if self.rng.random() < 0.5:
+                rows = rows + [bad]
+            else:
+                rows = rows[:-2] + [Candle(bad.open_time, bad.open, bad.low * 0.9, bad.high, bad.close, 1.0,
+                                           bad.close_time)] + rows[-1:]
         if start is not None:
             rows = [c for c in rows if c.open_time >= start]
         if end is not None:
@@ -152,6 +161,7 @@ class SoakReport:
     restarts: int = 0
     commands: dict = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    checked_trades: set = field(default_factory=set)
 
 
 def check_invariants(engine: Engine, store: Store, rep: SoakReport, tag: str) -> None:
@@ -194,6 +204,23 @@ def check_invariants(engine: Engine, store: Store, rep: SoakReport, tag: str) ->
     rows = store.query("SELECT COUNT(*) AS n FROM signals WHERE status='wartet'")
     if rows[0]["n"] != len(core.waiting):
         p.append(f"{tag}: wartende Signale in DB ({rows[0]['n']}) != Kern ({len(core.waiting)})")
+    # Abgleich jedes Trades mit seinen einzelnen Ausführungen (Geldfluss)
+    for t in store.query("SELECT id, strategy, side, pnl_net, funding FROM trades"):
+        if t["id"] in rep.checked_trades:
+            continue
+        fills = store.query("SELECT market, side, qty, price, fee FROM fills WHERE position_id=?", (t["id"],))
+        flow = D(0)
+        for f in fills:
+            amount = D(f["qty"]) * D(f["price"])
+            flow += (amount if f["side"] == "sell" else -amount) - D(f["fee"])
+        flow += D(t["funding"])
+        if abs(flow - D(t["pnl_net"])) > D("0.001"):
+            p.append(f"{tag}: Trade {t['id']} Ergebnis {t['pnl_net']} passt nicht zu den Ausführungen ({flow})")
+        fsum = sum((D(r["amount"]) for r in store.query(
+            "SELECT amount FROM funding_payments WHERE position_id=?", (t["id"],))), D(0))
+        if fsum != D(t["funding"]):
+            p.append(f"{tag}: Trade {t['id']} Funding {t['funding']} != Summe Buchungen {fsum}")
+        rep.checked_trades.add(t["id"])
 
 
 def run_soak(tmp_path, seed: int, candles: int = 300, polls_per_candle: int = 3, chaos: bool = True,
@@ -201,6 +228,7 @@ def run_soak(tmp_path, seed: int, candles: int = 300, polls_per_candle: int = 3,
     rng = random.Random(seed)
     cfg = make_config(tmp_path, modus__start_modus=start_mode)
     sim = SimExchange(seed, n=600 + candles + 50)
+    sim.corrupt = chaos
     backup = SimExchange(seed, n=600 + candles + 50, key="bybit", name="Bybit (SIMULIERT)")
     feed = MarketData(cfg, sources=[sim, backup], clock_ms=lambda: sim.now_ms)
     store = Store(cfg.general.db_path)
@@ -219,7 +247,12 @@ def run_soak(tmp_path, seed: int, candles: int = 300, polls_per_candle: int = 3,
             if chaos and rng.random() < 0.01:
                 sim.down = not sim.down  # Ausfall der Hauptquelle an/aus
             engine.last_poll = 0
+            paused_before = engine.core.risk.state.paused or engine.core.risk.state.kill_switch
+            ids_before = {getattr(engine.core.trend_pos, "id", None), getattr(engine.core.dn_pos, "id", None)}
             engine.poll()
+            ids_after = {getattr(engine.core.trend_pos, "id", None), getattr(engine.core.dn_pos, "id", None)}
+            if paused_before and (ids_after - ids_before - {None}):
+                rep.problems.append(f"Kerze {k}/{j}: neue Position trotz PAUSE")
             if chaos:
                 r = rng.random()
                 cmd = None

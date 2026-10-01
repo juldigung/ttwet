@@ -219,6 +219,9 @@ def equity_section(status: dict) -> None:
     if df.empty:
         st.info("Noch keine Kapitalkurve – sie entsteht, sobald der Bot einige Minuten läuft.")
         return
+    if len(df) > 3000:  # für flüssige Anzeige ausdünnen (letzter Punkt bleibt immer enthalten)
+        step = len(df) // 3000 + 1
+        df = pd.concat([df.iloc[::step], df.iloc[[-1]]]).drop_duplicates("time")
     df["dt"] = to_local(df["time"], TZ)
     start = float(dec(status.get("start_capital_usdt")) or 0)
     start_trend = start * float(CFG.capital.share_trend)
