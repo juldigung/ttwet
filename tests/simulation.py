@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 import random
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 
@@ -24,6 +25,10 @@ from bot.util import D
 from tests.helpers import H4, H8, PERP_RULES, RULES, T0, make_config
 
 SUB = 24  # Zwischenstände je Kerze
+
+# Formulierungen, die nie vorkommen dürfen (keine Gewinnversprechen)
+PROMISE = re.compile(r"garantiert|risikolos|ohne Risiko|(?<!keinen )(?<!keinen\*\* )sicheren? Gewinn|Gewinn ist sicher|"
+                     r"wird steigen|sicher profitabel", re.IGNORECASE)
 
 
 class SimExchange:
@@ -183,6 +188,12 @@ def check_invariants(engine: Engine, store: Store, rep: SoakReport, tag: str) ->
     for t in trades:
         if not t["explanation_open"] or not t["explanation_close"]:
             p.append(f"{tag}: Trade ohne Erklärung")
+        for text in (t["explanation_open"], t["explanation_close"]):
+            if text and PROMISE.search(text):
+                p.append(f"{tag}: Gewinnversprechen in Erklärung: {PROMISE.search(text).group(0)}")
+    for r in store.query("SELECT explanation FROM signals WHERE explanation IS NOT NULL"):
+        if PROMISE.search(r["explanation"]):
+            p.append(f"{tag}: Gewinnversprechen in Signal-Erklärung: {PROMISE.search(r['explanation']).group(0)}")
     if core.dn_pos is not None and core.dn_pos.qty_spot != core.dn_pos.qty_perp:
         p.append(f"{tag}: Delta-Neutral ungleich abgesichert")
     tp = core.trend_pos

@@ -6,3 +6,7 @@ showEmailPrompt = false
 [browser]
 # Keine Nutzungsstatistik an Streamlit senden
 gatherUsageStats = false
+
+[client]
+# Entwickler-Menü (z. B. englischer "Deploy"-Knopf) ausblenden
+toolbarMode = "viewer"
