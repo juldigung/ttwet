@@ -70,7 +70,7 @@ class Engine:
         self.rec = DbRecorder(self.store)
         self._clock = clock
         self._sleep = sleep
-        self.core = self._load_core(announce=True)
+        self.core = self._load_core()
         self.learning = learning
         self.last_poll = 0.0
         self.last_equity_write = 0
@@ -87,23 +87,29 @@ class Engine:
 
     # -- Zustand ------------------------------------------------------------------------
 
-    def _load_core(self, announce: bool = False) -> TradingCore:
+    def announce_restore(self) -> None:
+        """Meldung beim Neustart: welcher Zustand wiederhergestellt wurde."""
+        core = self.core
+        if self.store.get_kv("core") is None:
+            return
+        parts = []
+        if core.trend_pos:
+            parts.append("EMA-Position offen")
+        if core.dn_pos:
+            parts.append("Delta-Neutral-Position offen")
+        if core.waiting:
+            parts.append(f"{len(core.waiting)} wartende Vorschläge" if len(core.waiting) != 1
+                         else "1 wartender Vorschlag")
+        text = ("Bot neu gestartet – gespeicherter Zustand wurde wiederhergestellt"
+                + (f" ({', '.join(parts)})." if parts else ".") + f" Modus: {core.mode}.")
+        log.info(text)
+        with self.store.transaction():
+            self.rec.event("info", text, int(self._clock() * 1000))
+
+    def _load_core(self) -> TradingCore:
         data = self.store.get_kv("core")
         if data:
-            core = TradingCore.from_dict(self.cfg, data, self.rec)
-            if announce:
-                parts = []
-                if core.trend_pos:
-                    parts.append("EMA-Position offen")
-                if core.dn_pos:
-                    parts.append("Delta-Neutral-Position offen")
-                if core.waiting:
-                    parts.append(f"{len(core.waiting)} wartende(r) Vorschlag/Vorschläge" if len(core.waiting) != 1
-                                 else "1 wartender Vorschlag")
-                with self.store.transaction():
-                    self.rec.event("info", "Bot neu gestartet – gespeicherter Zustand wurde wiederhergestellt"
-                                   + (f" ({', '.join(parts)})." if parts else "."), int(self._clock() * 1000))
-            return core
+            return TradingCore.from_dict(self.cfg, data, self.rec)
         return TradingCore(self.cfg, self.rec)
 
     def _save_core(self) -> None:
@@ -363,6 +369,7 @@ class Engine:
     def run_forever(self) -> None:
         self.check_single_instance()
         log.info("Bot-Engine gestartet (NUR SPIELGELD). Modus: %s. Beenden mit Strg + C.", self.core.mode)
+        self.announce_restore()
         while not self.stop_requested:
             try:
                 self.step()
@@ -375,7 +382,19 @@ class Engine:
                 self._sleep(1)
             except KeyboardInterrupt:
                 break
+        self.mark_stopped()
         log.info("Bot-Engine beendet. Alle Daten sind gespeichert.")
+
+    def mark_stopped(self) -> None:
+        """Beim sauberen Beenden: Lebenszeichen löschen (sofortiger Neustart erlaubt, Dashboard zeigt 'läuft nicht')."""
+        try:
+            with self.store.transaction():
+                status = self.store.get_kv("status") or {}
+                status["heartbeat"] = None
+                status["stopped_at"] = self.now_ms()
+                self.store.set_kv("status", status)
+        except Exception:  # Beenden darf nie an der Datenbank scheitern
+            log.warning("Status beim Beenden konnte nicht gespeichert werden.")
 
 
 def mode_label(mode: str) -> str:

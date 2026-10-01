@@ -184,6 +184,7 @@ def test_restart_restores_open_position(tmp_path):
     assert pos is not None
     cash = h.engine.core.cash[TREND]
     h.engine = h.new_engine()  # "Neustart"
+    h.engine.announce_restore()
     core = h.engine.core
     assert core.trend_pos is not None and core.trend_pos.id == pos.id
     assert core.trend_pos.stop_price == pos.stop_price and core.cash[TREND] == cash
@@ -397,3 +398,17 @@ def test_core_trailing_stop_follows_and_exits(tmp_path):
     trade = list(core.rec.trades.values())[0]
     assert trade.exit_reason == "trailing_stop"
     assert D(trade.pnl_net) > 0
+
+
+def test_clean_shutdown_allows_immediate_restart(tmp_path):
+    from bot.engine import AlreadyRunningError
+    h = Harness(tmp_path, delta_neutral__aktiv=False)
+    import time as _t
+    st = h.store.get_kv("status")
+    st["heartbeat"] = int(_t.time() * 1000)
+    h.store.set_kv("status", st)
+    e2 = Engine(h.cfg, store=h.store, feed=h.feed, sleep=lambda s: None)
+    with pytest.raises(AlreadyRunningError):
+        e2.check_single_instance()  # anderer Bot "läuft" noch
+    h.engine.mark_stopped()
+    e2.check_single_instance()  # nach sauberem Beenden sofort erlaubt
