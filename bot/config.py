@@ -8,6 +8,7 @@ intern in Anteile umgerechnet (0.01).
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
@@ -261,7 +262,8 @@ class _Reader:
 
 def load_config(path: Path | str | None = None) -> Config:
     """Lädt und prüft die Konfiguration. Wirft ConfigError bei Fehlern."""
-    cfg_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    # Optional: anderer Pfad über die Umgebungsvariable BOT_CONFIG (z. B. für Tests)
+    cfg_path = Path(path) if path else Path(os.environ.get("BOT_CONFIG") or DEFAULT_CONFIG_PATH)
     if not cfg_path.exists():
         raise ConfigError([f"Die Datei {cfg_path} wurde nicht gefunden."])
     try:
