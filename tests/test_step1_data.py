@@ -480,3 +480,14 @@ def test_eur_rate_falls_back_to_other_source_then_manual():
     cfg2 = make_config(allgemein__eur_usdt_kurs_manuell=1.12)
     md2 = MarketData(cfg2, sources=[FakeSource(eur=None)], clock_ms=lambda: main.now_ms)
     assert md2.update().eur_usdt == Decimal("1.12")
+
+
+def test_config_newer_optional_keys_have_defaults():
+    raw = copy.deepcopy(raw_config())
+    del raw["lernen"]["walk_forward_training_tage"]
+    del raw["lernen"]["walk_forward_test_tage"]
+    cfg = parse_config(raw)  # ältere config.yaml ohne diese Einträge funktioniert weiter
+    assert cfg.learn.wf_train_days == 180 and cfg.learn.wf_test_days == 60
+    raw["lernen"]["walk_forward_test_tage"] = 5
+    with pytest.raises(ConfigError, match="walk_forward_test_tage"):
+        parse_config(raw)

@@ -183,20 +183,22 @@ class _Reader:
         self.data = data if isinstance(data, dict) else {}
         self.problems: list[str] = []
 
-    def _get(self, section: str, key: str):
+    def _get(self, section: str, key: str, optional: bool = False):
         sec = self.data.get(section)
         if not isinstance(sec, dict):
             self.problems.append(f"Abschnitt '{section}' fehlt.")
             return None, False
         if key not in sec:
-            self.problems.append(f"'{section}.{key}' fehlt.")
+            if not optional:
+                self.problems.append(f"'{section}.{key}' fehlt.")
             return None, False
         return sec[key], True
 
-    def number(self, section, key, lo=None, hi=None, *, integer=False, allow_none=False):
-        value, ok = self._get(section, key)
+    def number(self, section, key, lo=None, hi=None, *, integer=False, allow_none=False, default=None):
+        """Liest eine Zahl. Mit default: Fehlt der Eintrag (ältere config.yaml), gilt der Standardwert."""
+        value, ok = self._get(section, key, optional=default is not None)
         if not ok:
-            return None
+            return default
         if value is None and allow_none:
             return None
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -404,8 +406,8 @@ def parse_config(raw: dict, cfg_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         optimize_every_days=r.number("lernen", "optimierung_intervall_tage", 1, 365, integer=True),
         optimize_history_days=r.number("lernen", "optimierung_historie_tage", 120, 3000, integer=True),
         adaptive_risk=r.boolean("lernen", "adaptives_risiko"),
-        wf_train_days=r.number("lernen", "walk_forward_training_tage", 30, 1000, integer=True),
-        wf_test_days=r.number("lernen", "walk_forward_test_tage", 10, 365, integer=True),
+        wf_train_days=r.number("lernen", "walk_forward_training_tage", 30, 1000, integer=True, default=180),
+        wf_test_days=r.number("lernen", "walk_forward_test_tage", 10, 365, integer=True, default=60),
     )
     if (learn.wf_train_days is not None and learn.wf_test_days is not None
             and learn.optimize_history_days is not None
