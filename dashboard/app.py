@@ -600,7 +600,8 @@ def main_area() -> None:
     waiting_section()
     overview(status)
     tabs = st.tabs(["📈 Übersicht", "🕯️ Chart", "💱 Delta-Neutral & Funding", "📋 Trades", "🚦 Signale",
-                    "🛡️ Risiko", "🧠 Lernsystem", "🔁 Backtest", "📝 Meldungen & Log", "📖 Glossar"])
+                    "🛡️ Risiko", "🧠 Lernsystem", "🔁 Backtest", "📝 Meldungen & Log", "📖 Glossar"],
+                   key="haupt_reiter")  # fester Schlüssel: gewählter Reiter bleibt bei Aktualisierung erhalten
     with tabs[0]:
         equity_section(status)
         st.subheader("Offene Positionen")
