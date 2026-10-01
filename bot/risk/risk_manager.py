@@ -85,15 +85,17 @@ class RiskState:
 
 
 class RiskManager:
-    def __init__(self, cfg: Config, state: RiskState | None = None, events=None):
+    def __init__(self, cfg: Config, state: RiskState | None = None, events=None, quiet: bool = False):
         self.cfg = cfg
+        self.quiet = quiet  # True im Backtest: keine Einträge in der Live-Logdatei
         self.state = state or RiskState()
         # events: Funktion(level, text) für Meldungen im Dashboard
         self._events = events or (lambda level, text: None)
         self.tz = cfg.general.display_tz
 
     def _event(self, level: str, text: str) -> None:
-        getattr(log, "warning" if level != "info" else "info")(text)
+        if not self.quiet:
+            getattr(log, "warning" if level != "info" else "info")(text)
         self._events(level, text)
 
     # -- Kapital-Überwachung --------------------------------------------------------
@@ -153,7 +155,9 @@ class RiskManager:
         if net_pnl < 0:
             s.loss_streak += 1
             if s.loss_streak >= self.cfg.risk.loss_streak:
-                s.cooldown_until = time + self.cfg.risk.cooldown_candles * step_ms
+                # ab dem Ende der Kerze, in der der Trade geschlossen wurde, N volle Kerzen
+                candle_end = ((time + step_ms - 1) // step_ms) * step_ms
+                s.cooldown_until = candle_end + self.cfg.risk.cooldown_candles * step_ms
                 s.loss_streak = 0
                 self._event(
                     "warnung",

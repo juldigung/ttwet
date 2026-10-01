@@ -102,8 +102,9 @@ class CoreStatus:
 
 class TradingCore:
     def __init__(self, cfg: Config, recorder: Recorder | None = None, params: Params | None = None,
-                 risk_state: RiskState | None = None):
+                 risk_state: RiskState | None = None, quiet: bool = False):
         self.cfg = cfg
+        self.quiet = quiet  # True im Backtest/Lernsystem: nichts in die Live-Logdatei schreiben
         self.rec = recorder or Recorder()
         self.params = params or Params.from_config(cfg)
         self.step = cfg.market.interval_ms
@@ -122,7 +123,7 @@ class TradingCore:
         self.last_funding_time = 0
         self.recent_dn_closed: list[dict] = []
         self.closed_trades = 0
-        self.risk = RiskManager(cfg, risk_state, events=self._risk_event)
+        self.risk = RiskManager(cfg, risk_state, events=self._risk_event, quiet=quiet)
         self.now = 0
         self.data_ok = False
         self.spot_price: Decimal | None = None
@@ -145,7 +146,8 @@ class TradingCore:
         self.rec.event(level, text, self.now)
 
     def event(self, level: str, text: str) -> None:
-        getattr(log, {"info": "info", "warnung": "warning", "fehler": "error"}.get(level, "info"))(text)
+        if not self.quiet:
+            getattr(log, {"info": "info", "warnung": "warning", "fehler": "error"}.get(level, "info"))(text)
         self.rec.event(level, text, self.now)
 
     def _warn_once(self, key: str, text: str, every_ms: int = 4 * HOUR_MS) -> None:
@@ -296,7 +298,8 @@ class TradingCore:
             new_stop = trailing_stop_update(pos, close, p.trailing_pct)
             if new_stop is not None:
                 self.rec.position(TREND, pos)
-                log.info("Trailing-Stop nachgezogen auf %s", fmt_usdt(new_stop))
+                if not self.quiet:
+                    log.info("Trailing-Stop nachgezogen auf %s", fmt_usdt(new_stop))
         if not p.enabled and not pos:
             return
         found = signals_at(ind, i, self._trend_side(), p.allow_short)
@@ -344,7 +347,7 @@ class TradingCore:
         if p.min_ema_gap > 0 and D(s.gap_pct) < p.min_ema_gap:
             reasons.append(f"Filter: Abstand der EMA-Linien ({fmt_pct(s.gap_pct, 3)}) ist kleiner als der "
                            f"Mindestabstand ({fmt_pct(p.min_ema_gap, 3)}).")
-        reasons += [f"Lernregel: {r}" for r in filter_blocks(self.params.filters, sig.data.get("features", {}))]
+        reasons += [f"Lernregel: {r}" for r in filter_blocks(self.params.filters, sig.data.get("features", {}), TREND)]
         ok, checks = self._all_checks(TREND, flip=flip)
         if reasons or not ok:
             reasons += [c.text for c in checks if not c.ok]
@@ -543,6 +546,7 @@ class TradingCore:
         reasons = [] if chk.ok else [chk.reason]
         if not chk.ok:
             self._warn_once("basis", f"Warnung: {chk.reason} Kein neuer Delta-Neutral-Einstieg.")
+        reasons += [f"Lernregel: {r}" for r in filter_blocks(self.params.filters, sig.data.get("features", {}), DN)]
         ok, checks = self._all_checks(DN)
         if reasons or not ok:
             reasons += [c.text for c in checks if not c.ok]
@@ -739,7 +743,8 @@ class TradingCore:
                 pos.last_funding_time = T
                 self.rec.funding(FundingRecord(T, pos.id, str(e.rate), str(mark), str(pos.qty_perp), str(amount)))
                 self.rec.position(DN, pos)
-                log.info("Funding verbucht: Rate %s, Betrag %s", e.rate, fmt_usdt(amount, 4))
+                if not self.quiet:
+                    log.info("Funding verbucht: Rate %s, Betrag %s", e.rate, fmt_usdt(amount, 4))
             for closed in self.recent_dn_closed:
                 if closed["entry_time"] < T <= closed["exit_time"] and T not in closed["booked"]:
                     self._late_funding(closed, T, e.rate, mark)
@@ -976,6 +981,9 @@ class TradingCore:
         self.ind = ind
         self.perp_closes = {c.open_time: c.close for c in snap.perp_closed}
         self.perp_opens = {c.open_time: c.open for c in snap.perp_closed}
+        if snap.perp_running is not None:
+            # Eröffnung der laufenden Perp-Kerze ist bereits bekannt (z. B. für Funding zu deren Beginn)
+            self.perp_opens[snap.perp_running.open_time] = snap.perp_running.open
         perp_lookup = self._perp_price_at
 
         if self.last_closed_time is None:

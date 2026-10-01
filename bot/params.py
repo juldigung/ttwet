@@ -80,10 +80,12 @@ class Params:
         return base.with_overrides(d.get("overrides", {}), d.get("filters", []), int(d.get("version", 0)))
 
 
-def filter_blocks(filters: list, features: dict) -> list[str]:
+def filter_blocks(filters: list, features: dict, strategy: str = "trend") -> list[str]:
     """Prüft angenommene Lernregeln. Gibt die Texte der Regeln zurück, die einen Einstieg verhindern."""
     hits = []
     for f in filters:
+        if f.get("strategy", "trend") != strategy:
+            continue
         value = features.get(f.get("feature"))
         if value is None:
             continue

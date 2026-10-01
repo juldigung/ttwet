@@ -82,7 +82,7 @@ def test_loss_streak_starts_cooldown_for_that_strategy_only():
     rm.on_trade_closed(TREND, D("-10"), now, H4)
     assert rm.state.strategies[TREND].loss_streak == 2
     rm.on_trade_closed(TREND, D("-10"), now, H4)  # 3. Verlust -> Abkühlphase 5 Kerzen
-    assert rm.state.strategies[TREND].cooldown_until == now + 5 * H4
+    assert rm.state.strategies[TREND].cooldown_until == now + 5 * H4  # now liegt auf dem Raster
     ok, rules = blocked_rules(rm, TREND, now + 4 * H4)
     assert not ok and rules == ["Abkühlphase nach Verlustserie"]
     assert rm.entry_allowed(DN, now + 4 * H4, True)[0]  # andere Strategie nicht betroffen
