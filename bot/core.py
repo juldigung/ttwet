@@ -754,7 +754,9 @@ class TradingCore:
             pos = self.dn_pos
             if pos is not None and pos.entry_time < T:
                 amount = funding_payment(pos.qty_perp, mark, e.rate)
-                self.cash[DN] += amount
+                # Funding läuft über die hinterlegte Margin der Short-Position (wie bei isolierter Margin);
+                # beim Schließen fließt die Margin samt Funding zurück ins Strategie-Kapital.
+                pos.margin += amount
                 pos.funding_total += amount
                 pos.funding_count += 1
                 pos.last_funding_time = T
