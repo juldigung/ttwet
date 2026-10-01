@@ -95,7 +95,8 @@ class Engine:
                 if core.dn_pos:
                     parts.append("Delta-Neutral-Position offen")
                 if core.waiting:
-                    parts.append(f"{len(core.waiting)} Vorschlag/Vorschläge wartend")
+                    parts.append(f"{len(core.waiting)} wartende(r) Vorschlag/Vorschläge" if len(core.waiting) != 1
+                                 else "1 wartender Vorschlag")
                 with self.store.transaction():
                     self.rec.event("info", "Bot neu gestartet – gespeicherter Zustand wurde wiederhergestellt"
                                    + (f" ({', '.join(parts)})." if parts else "."), int(self._clock() * 1000))

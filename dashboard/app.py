@@ -231,7 +231,9 @@ def waiting_section() -> None:
     df = query_df(DB, "SELECT * FROM signals WHERE status='wartet' ORDER BY created")
     if df.empty:
         return
-    st.subheader(f"🔔 {len(df)} Vorschlag/Vorschläge warten auf deine Entscheidung")
+    n = len(df)
+    st.subheader(f"🔔 {n} Vorschlag wartet auf deine Entscheidung" if n == 1
+                 else f"🔔 {n} Vorschläge warten auf deine Entscheidung")
     for _, s in df.iterrows():
         with st.container(border=True):
             st.markdown(s["explanation"])
