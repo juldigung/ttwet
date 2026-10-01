@@ -372,7 +372,7 @@ class TradingCore:
                                 expires_at=sig.candle_time + self.step * (1 + self.cfg.mode.expiry_candles))
         self._dispatch(sig, plan)
 
-    def _open_trend(self, sig: SignalRecord, raw_price: Decimal, time: int, confirmed: bool) -> bool:
+    def _open_trend(self, sig: SignalRecord, raw_price: Decimal, time: int, timing: str = "open") -> bool:
         p = self.params.trend
         side = LONG if sig.kind == ENTRY_LONG else SHORT
         ok, checks = self._all_checks(TREND)
@@ -420,7 +420,7 @@ class TradingCore:
         pos.explanation = texts.trend_entry(
             sig=ts, fill=fill, pos=pos, size=size, equity=eq, risk_fraction=risk_frac, base_risk=p.risk_per_trade,
             risk_note=note, checks=checks, params=p, fees_rate=self.fee_spot, slippage=self.slip, tz=self.tz,
-            confirmed=confirmed)
+            timing=timing)
         self.trend_pos = pos
         self.rec.fill(TREND, pos.id, fill)
         self.rec.position(TREND, pos)
@@ -575,7 +575,8 @@ class TradingCore:
                            "required": str(chk.required), "basis": str(chk.basis)}
         self._dispatch(sig, plan)
 
-    def _open_dn(self, sig: SignalRecord, spot_raw: Decimal, perp_raw: Decimal, time: int, confirmed: bool) -> bool:
+    def _open_dn(self, sig: SignalRecord, spot_raw: Decimal, perp_raw: Decimal, time: int,
+                 timing: str = "open") -> bool:
         p = self.params.dn
         ok, checks = self._all_checks(DN)
         if not ok:
@@ -626,7 +627,7 @@ class TradingCore:
             chk=chk, spot_fill=sf, perp_fill=pf, pos=pos, size=size, liq_price=liq, liq_buffer=p.liq_buffer,
             checks=checks, interval_h=(self.funding_interval_ms / HOUR_MS) if self.funding_interval_ms else None,
             current_rate=self.current_rate, cost_frac=dnm.cost_fraction(self.cfg.costs), equity=eq, tz=self.tz,
-            confirmed=confirmed, payback_hours=p.payback_hours)
+            timing=timing, payback_hours=p.payback_hours)
         self.dn_pos = pos
         self.rec.fill(DN, pos.id, sf)
         self.rec.fill(DN, pos.id, pf)
@@ -820,13 +821,13 @@ class TradingCore:
         self.pending = keep
 
     def _execute(self, sig: SignalRecord, spot_raw: Decimal | None, perp_raw: Decimal | None,
-                 time: int, confirmed: bool) -> bool:
+                 time: int, timing: str = "open") -> bool:
         kind = sig.kind
         if kind in (ENTRY_LONG, ENTRY_SHORT):
             if spot_raw is None:
                 self._not_executed(sig, "verfallen", ["Kein aktueller Spot-Preis verfügbar."])
                 return False
-            return self._open_trend(sig, spot_raw, time, confirmed)
+            return self._open_trend(sig, spot_raw, time, timing)
         if kind in (EXIT_LONG, EXIT_SHORT):
             if self.trend_pos is None:
                 self._not_executed(sig, "verworfen", ["Es ist keine Position mehr offen."])
@@ -834,7 +835,9 @@ class TradingCore:
             if spot_raw is None:
                 self._not_executed(sig, "verfallen", ["Kein aktueller Spot-Preis verfügbar."])
                 return False
-            how = "von dir bestätigt und sofort ausgeführt" if confirmed else "zur Eröffnung der nächsten Kerze ausgeführt"
+            how = {"confirmed": "von dir bestätigt und sofort zum aktuellen Kurs ausgeführt",
+                   "late": "verspätet zum aktuellen Kurs ausgeführt (die Kerzeneröffnung war wegen einer "
+                           "Verzögerung beim Datenabruf schon vorbei)"}.get(timing, "zur Eröffnung der nächsten Kerze ausgeführt")
             self._close_trend(spot_raw, time, "gegensignal",
                               f"Die EMA-Linien haben sich in Gegenrichtung gekreuzt (Signal-Kerze vom "
                               f"{fmt_time(sig.candle_time, self.tz)}). Der Ausstieg wurde {how}.", sig=sig)
@@ -843,7 +846,7 @@ class TradingCore:
             if spot_raw is None or perp_raw is None:
                 self._not_executed(sig, "verfallen", ["Spot- oder Perp-Preis fehlte zur Ausführung."])
                 return False
-            return self._open_dn(sig, spot_raw, perp_raw, time, confirmed)
+            return self._open_dn(sig, spot_raw, perp_raw, time, timing)
         if kind == "DN_EXIT":
             if self.dn_pos is None:
                 self._not_executed(sig, "verworfen", ["Es ist keine Position mehr offen."])
@@ -858,8 +861,15 @@ class TradingCore:
             return True
         return False
 
-    def bar_open(self, t: int, spot_open: Decimal | None, perp_open: Decimal | None, fresh: bool = True) -> None:
-        """Eröffnung der Kerze t: geplante Aufträge zum Eröffnungskurs ausführen (Ausstiege zuerst)."""
+    def bar_open(self, t: int, spot_open: Decimal | None, perp_open: Decimal | None, fresh: bool = True,
+                 late_spot: Decimal | None = None, late_perp: Decimal | None = None) -> None:
+        """Eröffnung der Kerze t: geplante Aufträge zum Eröffnungskurs ausführen (Ausstiege zuerst).
+
+        fresh=False: Die Eröffnung liegt schon länger zurück (z. B. Verbindungsprobleme).
+        Läuft die Kerze noch und sind aktuelle Kurse bekannt (late_spot/late_perp), wird
+        verspätet zum AKTUELLEN Kurs ausgeführt – nie zu einem vergangenen Kurs.
+        Sonst verfällt der Auftrag.
+        """
         due = [p for p in self.pending if p.execute_at == t]
         missed = [p for p in self.pending if p.execute_at < t]
         self.pending = [p for p in self.pending if p.execute_at > t]
@@ -868,11 +878,14 @@ class TradingCore:
         due.sort(key=lambda p: 0 if p.signal.kind in EXIT_KINDS else 1)
         for p in due:
             if not fresh:
+                if late_spot is not None:
+                    self._execute(p.signal, late_spot, late_perp, self.now, timing="late")
+                    continue
                 self._not_executed(p.signal, "verfallen", [
                     "Der Bot war zur Eröffnung der Kerze nicht aktiv. Ein Trade zu einem vergangenen Kurs wäre "
                     "unrealistisch, daher verfällt das Signal."])
                 continue
-            self._execute(p.signal, spot_open, perp_open, t, confirmed=False)
+            self._execute(p.signal, spot_open, perp_open, t, timing="open")
 
     # =====================================================================
     # Bedienung (Dashboard-Befehle)
@@ -885,7 +898,7 @@ class TradingCore:
         if sig.expires_at is not None and self.now >= sig.expires_at:
             self._not_executed(sig, "verfallen", ["Die Bestätigung kam nach Ablauf der Gültigkeit."])
             return False, "Der Vorschlag war bereits abgelaufen."
-        done = self._execute(sig, self.spot_price, self.perp_price, self.now, confirmed=True)
+        done = self._execute(sig, self.spot_price, self.perp_price, self.now, timing="confirmed")
         return done, "Ausgeführt." if done else f"Nicht ausgeführt: {sig.reason}"
 
     def reject(self, signal_id: str) -> tuple[bool, str]:
@@ -1037,7 +1050,8 @@ class TradingCore:
                 tolerance = max(3 * self.cfg.general.poll_seconds * 1000, 5 * 60_000)
                 fresh = self.now - run.open_time <= tolerance
                 prun = snap.perp_running if (snap.perp_running and snap.perp_running.open_time == run.open_time) else None
-                self.bar_open(run.open_time, D(run.open), D(prun.open) if prun else None, fresh)
+                self.bar_open(run.open_time, D(run.open), D(prun.open) if prun else None, fresh,
+                              late_spot=self.spot_price, late_perp=self.perp_price)
                 self.last_open_time = run.open_time
             self.trend_intrabar(run.open_time, D(run.open), D(run.low), D(run.high), self.now, current=self.spot_price)
 

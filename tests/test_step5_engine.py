@@ -412,3 +412,32 @@ def test_clean_shutdown_allows_immediate_restart(tmp_path):
         e2.check_single_instance()  # anderer Bot "läuft" noch
     h.engine.mark_stopped()
     e2.check_single_instance()  # nach sauberem Beenden sofort erlaubt
+
+
+def test_late_execution_at_current_price_when_open_was_missed(tmp_path):
+    """Wird die Kerzeneröffnung verpasst (z. B. Verbindungsprobleme), aber die Kerze läuft noch,
+    wird zum AKTUELLEN Kurs ausgeführt – nie zum vergangenen Eröffnungskurs."""
+    h = Harness(tmp_path, delta_neutral__aktiv=False)
+    for k in range(START + 1, 840):
+        h.goto(k, offset=20 * 60_000)  # jede Abfrage erst 20 Minuten nach Kerzenbeginn
+        if h.engine.core.trend_pos is not None:
+            break
+    pos = h.engine.core.trend_pos
+    assert pos is not None
+    fill = h.store.query("SELECT * FROM fills WHERE position_id=?", (pos.id,))[0]
+    assert fill["time"] == h.src.now_ms  # Zeitpunkt der verspäteten Ausführung, nicht die Eröffnung
+    assert D(fill["raw_price"]) == h.engine.core.spot_price
+    assert "verspätet zum aktuellen Kurs" in pos.explanation
+
+
+def test_missed_whole_candle_expires_order(tmp_path):
+    h = Harness(tmp_path, delta_neutral__aktiv=False)
+    core = h.engine.core
+    from bot.core import PendingOrder
+    from bot.records import SignalRecord
+    sig = SignalRecord("S-x", core.now, TREND, "ENTRY_LONG", T0, "geplant",
+                       data={"close": 30000.0, "ema_fast": 1.0, "ema_slow": 1.0, "atr": None})
+    core.pending.append(PendingOrder(sig, T0 + H4))
+    core.now = T0 + 3 * H4
+    core.bar_open(T0 + 2 * H4, D("30000"), D("30006"), fresh=True)
+    assert sig.status == "verfallen" and core.trend_pos is None

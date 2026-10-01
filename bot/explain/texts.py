@@ -47,6 +47,16 @@ NO_PROMISE = (
 )
 
 
+def _when(timing: str, t: int, tz: str) -> str:
+    """Wann/wie ausgeführt wurde: zur Kerzeneröffnung, nach Bestätigung oder verspätet."""
+    if timing == "confirmed":
+        return f"nach deiner Bestätigung sofort zum aktuellen Kurs ({fmt_time(t, tz)})"
+    if timing == "late":
+        return (f"verspätet zum aktuellen Kurs ({fmt_time(t, tz)}) – die Eröffnung der Kerze war wegen einer "
+                "Verzögerung beim Datenabruf schon vorbei")
+    return f"zur Eröffnung der nächsten Kerze ({fmt_time(t, tz)})"
+
+
 def _checks_md(checks) -> str:
     lines = []
     for c in checks:
@@ -83,7 +93,8 @@ def _ema_situation(kind: str, close: float, ema_fast: float, ema_slow: float, fa
 
 def trend_entry(*, sig, fill, pos, size, equity: Decimal, risk_fraction: Decimal, base_risk: Decimal,
                 risk_note: str, checks, params, fees_rate: Decimal, slippage: Decimal, tz: str,
-                confirmed: bool) -> str:
+                timing: str = "open") -> str:
+    confirmed = timing == "confirmed"
     side_text = "gekauft (Long)" if pos.side == "long" else "verkauft (Short, vereinfachte Simulation ohne Leihzinsen)"
     stop_dist = abs(fill.price - pos.stop_price)
     # geschätzter Verlust bis zum Stop: Kursverlust + Gebühren + Slippage beim Ausstieg
@@ -118,7 +129,7 @@ def trend_entry(*, sig, fill, pos, size, equity: Decimal, risk_fraction: Decimal
 {_ema_situation(sig.kind, sig.close, sig.ema_fast, sig.ema_slow, params.ema_fast, params.ema_slow)}
 
 **Was hat der Bot getan?**
-Er hat zur Eröffnung der nächsten Kerze ({fmt_time(fill.time, tz)}) virtuell **{fmt_btc(pos.qty)}** {side_text}
+Er hat {_when(timing, fill.time, tz)} virtuell **{fmt_btc(pos.qty)}** {side_text}
 zum Preis von **{fmt_usdt(fill.price)}** (Marktpreis {fmt_usdt(fill.raw_price)} plus simulierte Slippage).
 {"Du hast diesen Trade im Modus BESTÄTIGUNG freigegeben." if confirmed else "Modus AUTOMATIK: Der Trade wurde ohne Rückfrage ausgeführt (nur Spielgeld)."}
 
@@ -261,7 +272,8 @@ def _dn_situation(chk, interval_h: float | None, current_rate: Decimal | None, c
 
 def dn_entry(*, chk, spot_fill, perp_fill, pos, size, liq_price: Decimal, liq_buffer: Decimal,
              checks, interval_h, current_rate, cost_frac: Decimal, equity: Decimal, tz: str,
-             confirmed: bool, payback_hours: int) -> str:
+             timing: str, payback_hours: int) -> str:
+    confirmed = timing == "confirmed"
     return f"""### Delta-Neutral-Einstieg – Position eröffnet
 
 **Was ist passiert?**
@@ -270,7 +282,7 @@ Perpetual-Kontrakts regelmäßig an Verkäufer (Short).
 {_dn_situation(chk, interval_h, current_rate, cost_frac)}
 
 **Was hat der Bot getan?**
-Zur Eröffnung der nächsten Kerze ({fmt_time(spot_fill.time, tz)}):
+Ausgeführt {_when(timing, spot_fill.time, tz)}:
 - **Spot gekauft:** {fmt_btc(pos.qty_spot)} zu {fmt_usdt(spot_fill.price)} (Gebühr {fmt_usdt(spot_fill.fee, 4)})
 - **Perpetual verkauft (Short):** {fmt_btc(pos.qty_perp)} zu {fmt_usdt(perp_fill.price)} (Gebühr {fmt_usdt(perp_fill.fee, 4)}),
   Hebel {fmt_num(pos.leverage, 1)}x, hinterlegte Margin {fmt_usdt(pos.margin)}
