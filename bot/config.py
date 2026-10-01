@@ -147,6 +147,8 @@ class LearnCfg:
     optimize_every_days: int
     optimize_history_days: int
     adaptive_risk: bool
+    wf_train_days: int = 180
+    wf_test_days: int = 60
 
 
 @dataclass(frozen=True)
@@ -402,7 +404,13 @@ def parse_config(raw: dict, cfg_path: Path = DEFAULT_CONFIG_PATH) -> Config:
         optimize_every_days=r.number("lernen", "optimierung_intervall_tage", 1, 365, integer=True),
         optimize_history_days=r.number("lernen", "optimierung_historie_tage", 120, 3000, integer=True),
         adaptive_risk=r.boolean("lernen", "adaptives_risiko"),
+        wf_train_days=r.number("lernen", "walk_forward_training_tage", 30, 1000, integer=True),
+        wf_test_days=r.number("lernen", "walk_forward_test_tage", 10, 365, integer=True),
     )
+    if (learn.wf_train_days is not None and learn.wf_test_days is not None
+            and learn.optimize_history_days is not None
+            and learn.wf_train_days + learn.wf_test_days > learn.optimize_history_days):
+        r.problems.append("'lernen.optimierung_historie_tage' muss mindestens Trainings- plus Testzeit umfassen.")
 
     # --- dashboard ---
     dashboard = DashboardCfg(

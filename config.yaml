@@ -168,6 +168,10 @@ lernen:
   optimierung_intervall_tage: 7
   # Wie viele Tage Historie die Optimierung verwendet.
   optimierung_historie_tage: 730
+  # Walk-Forward-Test: Länge der Trainingszeit (Einstellungen suchen) und der
+  # anschließenden Testzeit (auf ungesehenen Daten prüfen) in Tagen.
+  walk_forward_training_tage: 180
+  walk_forward_test_tage: 60
   # Adaptives Risiko: Bei Verlustphasen wird das Risiko automatisch
   # verringert. Die Werte oben sind dabei immer die OBERGRENZE – das
   # Lernsystem kann Risiko nur senken, nie über diese Werte erhöhen.

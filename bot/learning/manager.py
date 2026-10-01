@@ -128,8 +128,9 @@ class LearningManager:
         def work():
             try:
                 hist = self.history_loader()
-                results = [walk_forward(self.cfg, hist, params, "trend"),
-                           walk_forward(self.cfg, hist, params, "delta_neutral")]
+                tr, te = self.cfg.learn.wf_train_days, self.cfg.learn.wf_test_days
+                results = [walk_forward(self.cfg, hist, params, "trend", tr, te),
+                           walk_forward(self.cfg, hist, params, "delta_neutral", tr, te)]
                 from bot.backtest.runner import run_backtest
 
                 full = run_backtest(self.cfg, hist, params)

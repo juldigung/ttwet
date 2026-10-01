@@ -269,9 +269,10 @@ class MarketData:
         self.premium = src.premium()
         # Funding-Historie: alle 5 Minuten oder kurz nach einem Abrechnungszeitpunkt
         due = self._clock() - self._last_funding_fetch > 5 * 60_000
-        nft = self.premium.next_funding_time if self.premium else None
         last_known = self.funding[-1].funding_time if self.funding else None
-        if nft and last_known and self.now() > last_known + (self.funding_interval_ms or 8 * HOUR_MS) + 30_000:
+        # Kurz nach einer neuen Abrechnung sofort nachladen. Ist das Intervall (noch) unbekannt,
+        # genügt der 5-Minuten-Takt oben – es wird kein Intervall angenommen.
+        if self.funding_interval_ms and last_known and self.now() > last_known + self.funding_interval_ms + 30_000:
             due = True
         if due:
             start = (last_known + 1) if last_known else self.now() - FUNDING_HISTORY_DAYS * DAY_MS
