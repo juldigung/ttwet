@@ -1,0 +1,180 @@
+# =====================================================================
+#  EINSTELLUNGEN DES PAPER-TRADING-BOTS  (NUR SPIELGELD!)
+# =====================================================================
+#  Diese Datei steuert den gesamten Bot. Änderungen werden beim nächsten
+#  Start des Bots übernommen (Bot beenden und neu starten).
+#
+#  Wichtig für Anfänger:
+#   - Prozentwerte werden als normale Zahl geschrieben: 1.0 bedeutet 1 %.
+#   - Als Dezimaltrennzeichen IMMER einen Punkt verwenden (1.5, nicht 1,5).
+#   - Die Einrückung (Leerzeichen am Zeilenanfang) muss erhalten bleiben.
+#   - Ungültige Werte werden beim Start erkannt und verständlich gemeldet.
+#
+#  Der Bot handelt ausschließlich mit virtuellem Geld. Er besitzt keine
+#  Funktion, um echte Aufträge an eine Börse zu senden.
+# =====================================================================
+
+allgemein:
+  # Startkapital in Euro. Beim allerersten Start wird es zum aktuellen
+  # EUR/USDT-Kurs in USDT umgerechnet (an der Börse wird in USDT gerechnet).
+  startkapital_eur: 10000
+  # Nur nötig, falls KEIN EUR/USDT-Kurs von der Börse abrufbar ist:
+  # Hier einen Kurs eintragen (z. B. 1.10 = 1 Euro kostet 1,10 USDT).
+  # "null" bedeutet: automatisch von der Börse holen.
+  eur_usdt_kurs_manuell: null
+  # Zeitzone für die Anzeige im Dashboard (gespeichert wird immer in UTC).
+  anzeige_zeitzone: "Europe/Berlin"
+  # Speicherort der Datenbank und der Logdatei (relativ zum Projektordner).
+  datenbank: "data/bot.db"
+  logdatei: "logs/bot.log"
+  # Wie oft (in Sekunden) der Bot neue Marktdaten abruft.
+  abfrage_intervall_sekunden: 30
+
+markt:
+  # Gehandelt wird nur Bitcoin gegen USDT.
+  basis_waehrung: "BTC"
+  quote_waehrung: "USDT"
+  # Zeitrahmen der Kerzen für die EMA-Strategie.
+  # Erlaubt: 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d
+  # Kürzere Zeitrahmen = mehr Signale, aber auch mehr Fehlsignale und Gebühren.
+  zeitrahmen: "4h"
+  # Wie viele Kerzen beim Start geladen werden (mindestens 500, damit die
+  # EMA 50 eingeschwungen ist; höchstens 1000 pro Abruf bei Binance).
+  historie_kerzen: 1000
+
+datenquelle:
+  # Reihenfolge der Datenquellen. Ist die erste nicht erreichbar, wird
+  # automatisch die nächste verwendet. Erlaubt: binance, bybit, okx
+  reihenfolge: ["binance", "bybit", "okx"]
+  # Maximale Wartezeit auf eine Antwort der Börse (Sekunden).
+  timeout_sekunden: 10
+  # Wie oft ein fehlgeschlagener Abruf wiederholt wird, bevor die nächste
+  # Datenquelle probiert wird.
+  max_versuche: 4
+  # Wartezeit vor der ersten Wiederholung; sie verdoppelt sich jedes Mal
+  # (wachsende Wartezeit), höchstens bis "wartezeit_max_sekunden".
+  wartezeit_start_sekunden: 1
+  wartezeit_max_sekunden: 30
+  # Daten-Schutz: Ist die letzte abgeschlossene Kerze älter als so viele
+  # Kerzenintervalle (gemessen ab ihrem Beginn), gibt es keine neuen Trades.
+  # Mindestens 2 (eine gerade abgeschlossene Kerze ist bis zu 2 Intervalle alt).
+  max_datenalter_kerzen: 2
+  # Nach so vielen Minuten auf einer Ersatzquelle wird erneut versucht,
+  # zur bevorzugten Quelle (erste in der Liste) zurückzukehren.
+  rueckkehr_versuch_minuten: 30
+
+kapital:
+  # Aufteilung des Startkapitals auf die zwei Strategien (Summe = 100).
+  anteil_trend_prozent: 50
+  anteil_delta_neutral_prozent: 50
+
+modus:
+  # Modus beim allerersten Start: "AUTOMATIK" oder "BESTAETIGUNG".
+  # Danach merkt sich der Bot den im Dashboard gewählten Modus.
+  start_modus: "AUTOMATIK"
+  # Im Modus BESTAETIGUNG: Nach wie vielen Kerzen ein unbeantwortetes
+  # Signal verfällt. 1 = bis zum Schluss der nächsten Kerze.
+  signal_verfall_kerzen: 1
+
+kosten:
+  # Gebühren pro Ausführung in Prozent.
+  # Quelle: Binance-Gebührenübersicht https://www.binance.com/en/fee/schedule
+  # (Standardkunde/VIP 0: Spot 0,1 %; USDⓈ-M-Futures Taker 0,05 %).
+  # Bitte bei Bedarf selbst prüfen – Gebühren können sich ändern.
+  spot_gebuehr_prozent: 0.1
+  futures_gebuehr_prozent: 0.05
+  # Simulierte Slippage (Preisabweichung bei der Ausführung) pro Ausführung.
+  slippage_prozent: 0.05
+
+trend:
+  # Strategie 1: Trendfolge mit EMA 20/50
+  aktiv: true
+  ema_schnell: 20
+  ema_langsam: 50
+  # Short-Trades (auf fallende Kurse setzen). Standard: AUS.
+  # Vereinfachte Simulation ohne Leihzinsen.
+  short_erlaubt: false
+  # Risiko pro Trade in Prozent des Strategie-Kapitals.
+  # HÖHER = größere Positionen = größere Schwankungen.
+  risiko_pro_trade_prozent: 1.0
+  # Art des Stop-Loss: "prozent" (fester Abstand) oder "atr" (abhängig von
+  # der Schwankungsbreite des Marktes).
+  stop_art: "prozent"
+  stop_prozent: 3.0
+  atr_periode: 14
+  atr_faktor: 2.0
+  # Eine Position darf höchstens diesen Anteil des Strategie-Kapitals haben.
+  max_positionsanteil_prozent: 50
+  # Trailing-Stop: Der Stop wird bei steigenden Kursen nachgezogen.
+  trailing_stop: false
+  trailing_abstand_prozent: 3.0
+  # Filter: Einstieg nur, wenn die EMA-Linien bei der Kreuzung mindestens
+  # so weit auseinanderliegen (in % des Kurses). 0 = kein Filter.
+  min_ema_abstand_prozent: 0.0
+
+delta_neutral:
+  # Strategie 2: Spot kaufen + gleiche Menge Perpetual verkaufen
+  aktiv: true
+  # Wie viel Prozent des Strategie-Kapitals eingesetzt werden dürfen.
+  max_kapitaleinsatz_prozent: 100
+  # Hebel der Short-Seite (1 bis 2). HÖHER = näher an der Liquidation.
+  hebel: 1
+  # Einstieg nur, wenn die erwarteten Funding-Einnahmen die gesamten Kosten
+  # (4 Ausführungen inkl. Slippage) innerhalb dieser Stundenzahl decken.
+  amortisation_stunden: 168
+  # Zusätzlicher Sicherheitsfaktor auf die Kosten (1.0 = genau decken).
+  sicherheitsfaktor: 1.0
+  # Für die Erwartung wird der Durchschnitt der letzten N Funding-Raten
+  # verwendet (vorsichtiger als nur die letzte Rate).
+  durchschnitt_perioden: 3
+  # Ausstieg, wenn die Funding-Rate so viele Perioden hintereinander unter
+  # der Schwelle liegt. Schwelle 0.0 = negativ.
+  ausstieg_perioden: 3
+  ausstieg_schwelle_prozent: 0.0
+  # ANNAHME für die vereinfachte Liquidations-Schätzung: Satz der
+  # Erhaltungsmarge. Der echte Satz ist bei Binance nur über private
+  # Kontozugänge abrufbar (hier bewusst nicht genutzt) und kann abweichen.
+  wartungsmargin_annahme_prozent: 0.4
+  # Kommt der Kurs der geschätzten Liquidation näher als dieser Abstand,
+  # wird die Position geschlossen.
+  liquidations_puffer_prozent: 20
+  # Erlaubte Abweichung zwischen Spot-Menge und Perp-Menge.
+  hedge_toleranz_prozent: 1.0
+  # Ist der Abstand zwischen Perp- und Spot-Preis (Basis) größer, gibt es
+  # eine Warnung und keinen neuen Einstieg.
+  max_basis_prozent: 0.5
+
+risiko:
+  # Maximaler Tagesverlust (in % des Gesamtkapitals zu Tagesbeginn 00:00 UTC).
+  # Wird er erreicht: keine neuen Trades bis 00:00 UTC.
+  max_tagesverlust_prozent: 3.0
+  # Maximaler Rückgang vom bisherigen Höchststand des Gesamtkapitals.
+  # Wird er erreicht: automatische PAUSE, Freigabe nur von Hand.
+  max_drawdown_prozent: 15.0
+  # Nach so vielen Verlusttrades in Folge eine Abkühlphase ...
+  verlustserie_anzahl: 3
+  # ... von so vielen Kerzen ohne neue Trades in dieser Strategie.
+  abkuehlung_kerzen: 5
+
+lernen:
+  # Lernsystem einschalten (true) oder ausschalten (false).
+  aktiv: true
+  # (a) Fehleranalyse: Mindestanzahl Trades in einer Gruppe, bevor ein
+  # Verbesserungsvorschlag gemacht wird.
+  analyse_min_trades: 8
+  # (b) Automatische Optimierung (Walk-Forward-Test) einschalten.
+  optimierung_aktiv: true
+  # Wie oft (Tage) die Optimierung läuft.
+  optimierung_intervall_tage: 7
+  # Wie viele Tage Historie die Optimierung verwendet.
+  optimierung_historie_tage: 730
+  # Adaptives Risiko: Bei Verlustphasen wird das Risiko automatisch
+  # verringert. Die Werte oben sind dabei immer die OBERGRENZE – das
+  # Lernsystem kann Risiko nur senken, nie über diese Werte erhöhen.
+  adaptives_risiko: true
+
+dashboard:
+  # Wie oft sich das Dashboard selbst aktualisiert (Sekunden).
+  aktualisierung_sekunden: 15
+  # Wie viele Kerzen im Chart angezeigt werden.
+  chart_kerzen: 300

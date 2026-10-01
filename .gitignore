@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Laufzeitdaten des Bots (werden beim Start neu angelegt)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+logs/*.log
+logs/*.log.*
+backtest_ergebnisse/

@@ -1,0 +1,13 @@
+# Benötigte Python-Pakete (Installation: pip install -r requirements.txt)
+# Getestet mit Python 3.11 und den jeweils angegebenen Hauptversionen.
+requests>=2.31,<3
+PyYAML>=6.0,<7
+pandas>=3.0,<4
+numpy>=2.0,<3
+ccxt>=4.5,<5
+streamlit>=1.50,<2
+plotly>=6.0,<8
+# Zeitzonen-Datenbank: unter Windows nötig, damit "Europe/Berlin" bekannt ist
+tzdata>=2024.1
+# Nur für die automatischen Tests
+pytest>=8,<10
