@@ -329,3 +329,71 @@ def test_core_state_roundtrip(tmp_path):
     restored = TradingCore.from_dict(core.cfg, data)
     assert restored.trend_pos.to_dict() == core.trend_pos.to_dict()
     assert restored.cash == core.cash and restored.mode == core.mode
+
+
+# ---------------------------------------------------------------------------
+# Zusätzliche Kern-Tests: Hedge, Liquidationspuffer, Trailing-Stop
+# ---------------------------------------------------------------------------
+
+from bot.broker.paper_broker import SELL, DnPosition  # noqa: E402
+
+
+def _core_with_dn(tmp_path, leverage="1", **cfg):
+    config = make_config(tmp_path, **cfg)
+    core = TradingCore(config, MemoryRecorder())
+    core.initialize(D("1.1"), T0)
+    core.rules = {"spot": RULES, "perp": PERP_RULES}
+    q = D("0.05")
+    sf = make_fill("spot", BUY, q, D("60000"), D("0.0005"), D("0.001"), D("0.01"), T0)
+    pf = make_fill("perp", SELL, q, D("60030"), D("0.0005"), D("0.0005"), D("0.1"), T0)
+    margin = (q * pf.price / D(leverage)).quantize(D("0.00000001"))
+    core.cash[DN] -= q * sf.price + sf.fee + margin + pf.fee
+    core.dn_pos = DnPosition("DN-x", sf, pf, q, q, D(leverage), margin, T0 - H4)
+    core.now = T0 + H4
+    core.spot_price, core.perp_price = D("60000"), D("60030")
+    return core
+
+
+def test_core_hedge_deviation_is_corrected_and_logged(tmp_path):
+    core = _core_with_dn(tmp_path)
+    core.dn_pos.qty_perp = D("0.049")  # 2 % zu wenig Short
+    core._dn_hedge_check(D("60030"), core.now)
+    assert core.dn_pos.qty_perp == core.dn_pos.qty_spot == D("0.05")
+    assert any("Absicherung angepasst" in t for _, _, t in core.rec.events)
+    assert core.rec.fills and core.rec.fills[-1][2].reason == "Absicherung anpassen"
+    core.dn_pos.qty_perp = D("0.0496")  # 0,8 % -> innerhalb der Toleranz, keine Anpassung
+    n = len(core.rec.fills)
+    core._dn_hedge_check(D("60030"), core.now)
+    assert len(core.rec.fills) == n
+
+
+def test_core_liquidation_buffer_closes_dn(tmp_path):
+    core = _core_with_dn(tmp_path, leverage="2", delta_neutral__hebel=2)
+    liq = core.dn_pos.perp_entry.price * D("1.5") / D("1.004")
+    # Kurs steigt bis 15 % unter die geschätzte Liquidation -> Puffer (20 %) verletzt
+    perp = liq / D("1.15")
+    core.dn_bar_close(T0 + H4, perp * D("0.9995"), perp, [], True)
+    assert core.dn_pos is None
+    trade = list(core.rec.trades.values())[0]
+    assert trade.exit_reason == "liquidation" and "vereinfacht" in trade.explanation_close
+
+
+def test_core_trailing_stop_follows_and_exits(tmp_path):
+    cfg = make_config(tmp_path, trend__trailing_stop=True, trend__trailing_abstand_prozent=3.0)
+    core = TradingCore(cfg, MemoryRecorder())
+    core.initialize(D("1.1"), T0)
+    core.rules = {"spot": RULES, "perp": PERP_RULES}
+    fill = make_fill("spot", BUY, D("0.03"), D("60000"), D("0"), D("0.001"), D("0.01"), T0)
+    core.cash[TREND] -= fill.qty * fill.price + fill.fee
+    core.trend_pos = TrendPosition("T-t", LONG, D("0.03"), fill, D("58200"), D("58200"), fill.price, D("50"), T0 - H4)
+    from bot.strategies.ema_trend import compute_indicators
+    from tests.helpers import candles_from_closes
+    closes = [60000.0] * 120 + [61000.0, 63000.0, 66000.0]
+    ind = compute_indicators(candles_from_closes(closes, start=T0 - 120 * H4), cfg.trend)
+    for i in range(120, 123):
+        core.trend_bar_close(ind, i, True)
+    assert core.trend_pos.stop_price == D("66000") * D("0.97")  # nachgezogen, nie zurück
+    core.trend_intrabar(T0 + 4 * H4, D("65500"), D("63500"), D("65800"), T0 + 5 * H4 - 1)
+    trade = list(core.rec.trades.values())[0]
+    assert trade.exit_reason == "trailing_stop"
+    assert D(trade.pnl_net) > 0

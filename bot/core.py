@@ -400,6 +400,12 @@ class TradingCore:
             return False
         fill = make_fill("spot", fill_side, size.qty, raw_price, self.slip, self.fee_spot, rules.tick_size, time,
                          "Einstieg EMA-Trendfolge")
+        need = (money(fill.qty * fill.price) if side == LONG else ZERO) + fill.fee
+        checks = checks + [RiskCheck("Genug virtuelles Kapital", need <= self.cash[TREND],
+                                     f"Benötigt {fmt_usdt(need)}, verfügbar {fmt_usdt(self.cash[TREND])}.")]
+        if need > self.cash[TREND]:
+            self._not_executed(sig, "blockiert", ["Nicht genug virtuelles Kapital."], checks)
+            return False
         if side == LONG:
             self.cash[TREND] -= money(fill.qty * fill.price) + fill.fee
         else:
@@ -595,7 +601,17 @@ class TradingCore:
         sf = make_fill("spot", BUY, size.qty, spot_raw, self.slip, self.fee_spot, rs.tick_size, time, "DN Spot-Kauf")
         pf = make_fill("perp", SELL, size.qty, perp_raw, self.slip, self.fee_fut, rp.tick_size, time, "DN Perp-Verkauf")
         margin = money(size.qty * pf.price / p.leverage)
-        self.cash[DN] -= money(sf.qty * sf.price) + sf.fee + margin + pf.fee
+        need = money(sf.qty * sf.price) + sf.fee + margin + pf.fee
+        checks = checks + [RiskCheck("Genug virtuelles Kapital", need <= self.cash[DN],
+                                     f"Benötigt (Spot + Margin + Gebühren) {fmt_usdt(need)}, verfügbar "
+                                     f"{fmt_usdt(self.cash[DN])}."),
+                           RiskCheck("Hebel und Kapitaleinsatz", p.leverage <= 2,
+                                     f"Hebel {fmt_num(p.leverage, 1)}x (erlaubt höchstens 2x), Kapitaleinsatz "
+                                     f"höchstens {fmt_pct(p.max_capital_use * mult, 0)}.")]
+        if need > self.cash[DN]:
+            self._not_executed(sig, "blockiert", ["Nicht genug virtuelles Kapital."], checks)
+            return False
+        self.cash[DN] -= need
         pos = DnPosition(id=new_id("DN"), spot_entry=sf, perp_entry=pf, qty_spot=size.qty, qty_perp=size.qty,
                          leverage=p.leverage, margin=margin, signal_time=sig.candle_time,
                          last_funding_time=0, features=sig.data.get("features", {}))

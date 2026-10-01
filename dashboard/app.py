@@ -510,6 +510,20 @@ def learning_section() -> None:
                 if not v["active"] and st.button("Diese Version wieder aktivieren", key=f"rev_{v['version']}"):
                     send("REVERT_PARAMS", {"version": int(v["version"])})
                     st.rerun()
+    learn_state = kv(DB, "learning") or {}
+    st.subheader("Walk-Forward-Test")
+    if not CFG.learn.enabled or not CFG.learn.optimize:
+        st.info("Die automatische Optimierung ist in config.yaml ausgeschaltet.")
+    else:
+        st.caption(f"Letzter Lauf: {fmt_time(learn_state.get('last_run'), TZ)} · nächster geplanter Lauf: "
+                   f"{fmt_time(learn_state.get('next_optimization'), TZ)}"
+                   + (f" · letzter Fehler: {learn_state['last_error']}" if learn_state.get("last_error") else ""))
+    last_wf = query_df(DB, "SELECT created, summary, report FROM backtests WHERE kind LIKE 'Lernsystem%' "
+                           "ORDER BY id DESC LIMIT 1")
+    if not last_wf.empty:
+        with st.expander(f"Letzter Bericht ({fmt_time(int(last_wf.iloc[0]['created']), TZ)}): "
+                         f"{last_wf.iloc[0]['summary']}"):
+            st.markdown(last_wf.iloc[0]["report"])
     if st.button("Optimierung jetzt starten",
                  help="Startet den Walk-Forward-Test sofort (dauert einige Minuten, läuft im Hintergrund)."):
         send("RUN_OPTIMIZATION")
@@ -542,14 +556,23 @@ def backtest_section() -> None:
 def log_section() -> None:
     ev = query_df(DB, "SELECT time, level, text FROM events ORDER BY id DESC LIMIT 300")
     if not ev.empty:
-        ev["Zeit"] = to_local(ev["time"], TZ).dt.strftime("%d.%m.%Y %H:%M:%S")
-        ev["Art"] = ev["level"].map({"info": "ℹ️ Info", "warnung": "⚠️ Warnung", "fehler": "⛔ Fehler"}).fillna(ev["level"])
-        st.dataframe(ev[["Zeit", "Art", "text"]].rename(columns={"text": "Meldung"}), hide_index=True, width="stretch")
+        icons = {"info": "ℹ️", "warnung": "⚠️", "fehler": "⛔"}
+        st.subheader("Letzte Meldungen")
+        lines = []
+        for _, r in ev.head(60).iterrows():
+            lines.append(f"- {icons.get(r['level'], '•')} **{fmt_time(int(r['time']), TZ)}** – {r['text']}")
+        st.markdown("\n".join(lines))
+        if len(ev) > 60:
+            with st.expander("Ältere Meldungen als Tabelle"):
+                ev["Zeit"] = to_local(ev["time"], TZ).dt.strftime("%d.%m.%Y %H:%M:%S")
+                st.dataframe(ev[["Zeit", "level", "text"]].rename(columns={"level": "Art", "text": "Meldung"}),
+                             hide_index=True, width="stretch")
     summaries = query_df(DB, "SELECT day, text FROM daily_summaries ORDER BY day DESC LIMIT 14")
     if not summaries.empty:
         st.subheader("Tageszusammenfassungen")
         for _, r in summaries.iterrows():
-            with st.expander(r["day"]):
+            y, m, d = r["day"].split("-")
+            with st.expander(f"{d}.{m}.{y}"):
                 st.markdown(r["text"])
     log_path = CFG.general.log_path
     if log_path.exists():

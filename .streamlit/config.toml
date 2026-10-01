@@ -1,0 +1,8 @@
+# Einstellungen für das Dashboard (Streamlit)
+[server]
+# Keine E-Mail-Abfrage beim ersten Start im Konsolenfenster
+showEmailPrompt = false
+
+[browser]
+# Keine Nutzungsstatistik an Streamlit senden
+gatherUsageStats = false

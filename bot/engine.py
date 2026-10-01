@@ -81,6 +81,9 @@ class Engine:
         self.last_snapshot: MarketSnapshot | None = None
         self.last_summary_check = 0
         self.stop_requested = False
+        self._last_error = ""
+        self._last_error_logged = 0.0
+        self._last_short_log = 0.0
 
     # -- Zustand ------------------------------------------------------------------------
 
@@ -139,7 +142,13 @@ class Engine:
                 self._save_core()
             self.last_snapshot = snap
         except Exception as exc:  # Not-Aus
-            log.error("Unerwarteter Fehler in der Verarbeitung:\n%s", traceback.format_exc())
+            text = f"{type(exc).__name__}: {exc}"
+            if text != self._last_error or self._clock() - self._last_error_logged > 3600:
+                log.error("Unerwarteter Fehler in der Verarbeitung:\n%s", traceback.format_exc())
+                self._last_error, self._last_error_logged = text, self._clock()
+            elif self._clock() - self._last_short_log > 600:
+                log.error("Derselbe Fehler tritt weiterhin auf (%s) – Not-Aus bleibt aktiv.", text[:200])
+                self._last_short_log = self._clock()
             self.core = self._load_core()  # letzten gespeicherten, konsistenten Zustand verwenden
             with self.store.transaction():
                 self.core.now = self.now_ms()
