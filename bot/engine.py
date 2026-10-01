@@ -24,9 +24,9 @@ from bot.core import AUTOMATIK, BESTAETIGUNG, TradingCore
 from bot.data.feed import MarketData, MarketSnapshot
 from bot.explain import texts
 from bot.records import Recorder
-from bot.risk.risk_manager import DN, TREND
+from bot.risk.risk_manager import TREND
 from bot.storage.db import Store
-from bot.util import DAY_MS, HOUR_MS, D, fmt_time, utc_day_start
+from bot.util import DAY_MS, HOUR_MS, D, utc_day_start
 
 log = logging.getLogger("bot.engine")
 

@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from bot.broker.paper_broker import LONG, TrendPosition, make_fill, BUY
-from bot.core import AUTOMATIK, BESTAETIGUNG, TradingCore
+from bot.core import AUTOMATIK, TradingCore
 from bot.data.feed import MarketData
 from bot.engine import Engine
 from bot.records import MemoryRecorder

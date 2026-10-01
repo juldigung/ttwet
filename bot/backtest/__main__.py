@@ -14,7 +14,6 @@ import json
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
 
 def main(argv=None) -> int:

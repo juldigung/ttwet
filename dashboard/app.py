@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -630,7 +630,7 @@ def main_area() -> None:
         log_section()
     with tabs[9]:
         glossary_section()
-    st.caption(f"Stand: {datetime.now(timezone.utc).astimezone().strftime('%d.%m.%Y %H:%M:%S')} · "
+    st.caption(f"Stand: {fmt_time(int(time.time() * 1000), TZ)} · "
                "Diese Anwendung handelt ausschließlich mit Spielgeld und gibt keine Anlageempfehlungen.")
 
 
