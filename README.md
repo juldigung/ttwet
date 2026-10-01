@@ -250,6 +250,10 @@ Die Datei `config.yaml` bleibt unverändert.
   Stop-Preis (bzw. bei Kurslücke zum Eröffnungskurs) minus Slippage ausgeführt.
 - **Ersatzquellen (Bybit/OKX):** liefern Funding-Historie ohne Mark-Preis; dann wird der Perp-Eröffnungskurs
   der Kerze verwendet. Beim Quellenwechsel wird die Kerzenhistorie neu geladen (keine Mischung von Börsen).
+- **Ausführung:** Signale entstehen beim Schluss einer Kerze; ausgeführt wird zur Eröffnung der nächsten Kerze.
+  Hat der Bot diese Eröffnung knapp verpasst (z. B. kurze Verbindungsprobleme), wird – solange die Kerze noch
+  läuft – zum **aktuellen** Kurs ausgeführt und das in der Erklärung vermerkt. Ist die Kerze schon vorbei,
+  verfällt das Signal. Es wird nie zu einem vergangenen Kurs gehandelt.
 - **Funding-Zahlungen**, die erst nach dem Schließen einer Position veröffentlicht werden, werden nachträglich
   verbucht und im Trade vermerkt.
 - **Backtests und Walk-Forward-Tests** nutzen historische Daten. Gute Ergebnisse in der Vergangenheit sind
