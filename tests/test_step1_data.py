@@ -491,3 +491,19 @@ def test_config_newer_optional_keys_have_defaults():
     raw["lernen"]["walk_forward_test_tage"] = 5
     with pytest.raises(ConfigError, match="walk_forward_test_tage"):
         parse_config(raw)
+
+
+def test_unexpected_source_error_is_treated_as_outage_not_crash():
+    cfg = make_config()
+
+    class Broken(FakeSource):
+        def spot_klines(self, *a, **k):
+            raise KeyError("unerwartetes Format")
+
+    good = FakeSource(key="bybit", name="Bybit")
+    md = MarketData(cfg, sources=[Broken(), good], clock_ms=lambda: good.now_ms)
+    snap = md.update()
+    assert snap.source_name == "Bybit" and snap.data_ok
+    md2 = MarketData(cfg, sources=[Broken()], clock_ms=lambda: good.now_ms)
+    snap2 = md2.update()
+    assert not snap2.connection_ok and not snap2.data_ok

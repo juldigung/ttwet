@@ -321,7 +321,13 @@ class MarketData:
                 self._poll()
                 self.connection_ok = True
                 break
-            except DataSourceError as exc:
+            except Exception as exc:  # noqa: BLE001 – jede Störung der Quelle zählt als Datenproblem
+                if not isinstance(exc, DataSourceError):
+                    # z. B. unerwartetes Antwortformat der Börse: wie ein Ausfall behandeln
+                    # (Ersatzquelle, Daten-Schutz) statt den Not-Aus auszulösen
+                    log.warning("Unerwartete Antwort der Datenquelle %s (%s: %s) – wird wie ein Ausfall behandelt.",
+                                self.source.name, type(exc).__name__, str(exc)[:200], exc_info=True)
+                    self.loaded = False
                 log.warning("Datenquelle %s nicht nutzbar: %s", self.source.name, exc)
                 self.warnings.append(f"{self.source.name}: {exc}")
                 tried += 1
