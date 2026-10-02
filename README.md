@@ -9,7 +9,7 @@ Der Bot verwendet echte Live-Marktdaten von Binance (bei Ausfall automatisch Byb
 zwei Strategien mit Spielgeld:
 
 1. **EMA-Trendfolge (EMA 20/50):** Kauf, wenn die schnelle Linie (EMA 20) die langsame (EMA 50) von unten
-   nach oben kreuzt; Verkauf beim Gegensignal oder Stop-Loss. Zeitrahmen: 4-Stunden-Kerzen.
+   nach oben kreuzt; Verkauf beim Gegensignal oder Stop-Loss. Zeitrahmen: 15-Minuten-Kerzen.
 2. **Delta-Neutral (Funding):** Bitcoin am Spotmarkt kaufen und gleich viel als Perpetual verkaufen.
    Kursbewegungen gleichen sich aus; Ertrag kann aus Funding-Zahlungen entstehen.
 
@@ -83,7 +83,9 @@ Was beim **ersten Start** passiert:
   (an der Börse wird in USDT gerechnet). Aufteilung: 50 % EMA-Trendfolge, 50 % Delta-Neutral.
 - Es werden 1.000 Kerzen Historie geladen, damit die EMA 50 eingeschwungen ist.
 - Der Bot handelt **nicht** rückwirkend: Signale entstehen nur aus Kerzen, die ab jetzt abgeschlossen werden.
-  Bei 4-Stunden-Kerzen kann es daher Stunden oder Tage dauern, bis der erste Trade passiert.
+  Auch bei 15-Minuten-Kerzen kann es Stunden bis Tage dauern, bis der erste Trade passiert –
+  je nachdem, wann sich die EMAs kreuzen.
+- Im Modus BESTÄTIGUNG hast du für jeden Vorschlag eine Kerze Zeit (15 Minuten), danach verfällt er.
 
 **Lass dieses Fenster offen**, solange der Bot laufen soll. Alle Meldungen landen zusätzlich in `logs/bot.log`.
 

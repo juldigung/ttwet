@@ -21,7 +21,10 @@ T0 = 1_700_006_400_000  # 2023-11-15 00:00 UTC, liegt auf dem 4h-Raster
 
 
 def raw_config() -> dict:
-    return yaml.safe_load((PROJECT_DIR / "config.yaml").read_text(encoding="utf-8"))
+    raw = yaml.safe_load((PROJECT_DIR / "config.yaml").read_text(encoding="utf-8"))
+    # Die Testdaten liegen auf dem 4h-Raster – unabhängig vom eingestellten Zeitrahmen.
+    raw["markt"]["zeitrahmen"] = "4h"
+    return raw
 
 
 def make_config(tmp_path: Path | None = None, **overrides) -> Config:
