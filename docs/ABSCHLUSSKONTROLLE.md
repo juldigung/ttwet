@@ -75,4 +75,4 @@ Durchsucht wurden alle Quelldateien (`bot/`, `dashboard/`, config.yaml, .bat).
 - Alle Bedienelemente, Erklärungen, Logs und Fehlermeldungen sind auf Deutsch.
 - Suche nach Versprechensformulierungen („garantiert“, „risikofrei“, „sicherer Gewinn“ …): keine Treffer.
 - Dauertests prüfen das zusätzlich automatisch.
-- Das Dashboard zeigt einen festen Hinweis: kein Gewinnversprechen, nur Simulation.
+- Jede Trade-Erklärung endet mit dem Hinweis „Simulation mit Spielgeld, kein Signal ist eine Garantie“; das Dashboard zeigt im Fußbereich „ausschließlich Spielgeld, keine Anlageempfehlungen“.
